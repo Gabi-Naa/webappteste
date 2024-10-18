@@ -2,13 +2,9 @@
 import streamlit as st
 from ACTlib01 import *
 
-Configurar_Pagina("Exemplo 1", 
-                    "amplo", 
-                    "auto", 
-                    "https://docs.streamlit.io", 
-                    "mailto:informacoes.actsp@gmail.com", 
-                    "ACT - Soluções para Pessoas. Você pode usar formatação Markdown para adicionar informações neste espaço. Para mais informações acesse *https://www.markdownguide.org*",
-                    "©️")
+url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqsYs1IHpDcqSbn0vd0WhlfBO__UdkEwox69_1zphPFmISLM4BA7YTj7KSvxxHuk3-uMKAuuXAcpJX/pub?gid=270064191&single=true&output=csv"
+db = Ler_GooglePlanilha(url)
+Escrever(db)
 
 # Use st.title("") para adicionar um TÍTULO ao seu Web app
 st.title("Gabi")
