@@ -1,0 +1,146 @@
+import os
+import re
+import tkinter as tk
+from tkinter import filedialog, messagebox, simpledialog
+import fitz  # PyMuPDF
+from PIL import Image
+import pytesseract
+import io
+import threading
+
+class PDFImageTextExtractorApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("PDF Image Text Extractor")
+        
+        self.pdf_files = []
+        self.pdf_listbox = tk.Listbox(root, width=50, height=15, selectmode=tk.SINGLE)
+        self.pdf_listbox.pack(pady=10)
+
+        # Loading indicator
+        self.loading_label = tk.Label(root, text="", font=("Helvetica", 12))
+        self.loading_label.pack()
+
+        # Buttons for actions
+        btn_frame = tk.Frame(root)
+        btn_frame.pack()
+
+        self.select_button = tk.Button(btn_frame, text="Select PDF", command=self.select_pdf)
+        self.select_button.grid(row=0, column=0, padx=5, pady=5)
+        
+        self.remove_button = tk.Button(btn_frame, text="Remove PDF", command=self.remove_pdf)
+        self.remove_button.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.rename_button = tk.Button(btn_frame, text="Rename PDF", command=self.rename_pdf)
+        self.rename_button.grid(row=0, column=2, padx=5, pady=5)
+        
+        self.extract_button = tk.Button(btn_frame, text="Extract Text", command=self.start_extraction)
+        self.extract_button.grid(row=0, column=3, padx=5, pady=5)
+        
+        self.close_button = tk.Button(btn_frame, text="Close", command=root.quit)
+        self.close_button.grid(row=0, column=4, padx=5, pady=5)
+
+        # Loading symbol spinner
+        self.spinner_chars = ["|", "/", "-", "\\"]
+        self.spinner_index = 0
+        self.extracting = False
+
+    def select_pdf(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+        if file_path:
+            self.pdf_files.append(file_path)
+            self.update_pdf_list()
+
+    def remove_pdf(self):
+        selected = self.pdf_listbox.curselection()
+        if selected:
+            del self.pdf_files[selected[0]]
+            self.update_pdf_list()
+        else:
+            messagebox.showwarning("No Selection", "Please select a PDF to remove.")
+
+    def rename_pdf(self):
+        selected = self.pdf_listbox.curselection()
+        if selected:
+            old_name = self.pdf_files[selected[0]]
+            new_name = simpledialog.askstring("Rename PDF", "Enter new name (without extension):")
+            if new_name:
+                new_path = os.path.join(os.path.dirname(old_name), new_name + ".pdf")
+                os.rename(old_name, new_path)
+                self.pdf_files[selected[0]] = new_path
+                self.update_pdf_list()
+        else:
+            messagebox.showwarning("No Selection", "Please select a PDF to rename.")
+
+    def start_extraction(self):
+        selected = self.pdf_listbox.curselection()
+        if selected:
+            pdf_path = self.pdf_files[selected[0]]
+            # Run extraction in a separate thread
+            self.extracting = True
+            threading.Thread(target=self.extract_text_from_image_in_pdf, args=(pdf_path,)).start()
+            self.update_loading_indicator()
+        else:
+            messagebox.showwarning("No Selection", "Please select a PDF to extract text.")
+
+    def update_pdf_list(self):
+        self.pdf_listbox.delete(0, tk.END)
+        for pdf_file in self.pdf_files:
+            self.pdf_listbox.insert(tk.END, os.path.basename(pdf_file))
+
+    def update_loading_indicator(self):
+        if self.extracting:
+            self.loading_label.config(text=f"Processing... {self.spinner_chars[self.spinner_index]}")
+            self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
+            self.root.after(100, self.update_loading_indicator)
+        else:
+            self.loading_label.config(text="")
+
+    def extract_text_from_image_in_pdf(self, pdf_path):
+        keywords = [
+            r"\bPROPRIETÁRIA\b|\bPROPRIETÁRIO\b|\bPROPRIETÁRIOS\b",
+            r"\bMATRICULA\b|\bREGISTRO\b",
+            r"\bCARTÓRIO\b|\bCARTORIO\b",
+            r"\bCPF\b|\bCNPJ\b",
+            r"\bRG\b"
+        ]
+        
+        # Prepare output file
+        output_file = f"{os.path.splitext(pdf_path)[0]}_processed.txt"
+        extracted_text = ""
+
+        with fitz.open(pdf_path) as pdf_document:
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                image_list = page.get_images(full=True)
+
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = pdf_document.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    image = Image.open(io.BytesIO(image_bytes))
+                    text = pytesseract.image_to_string(image,"por")
+
+                    words = text.split()
+                    for keyword in keywords:
+                        for match in re.finditer(keyword, text, re.IGNORECASE):
+                            start_idx = max(0, match.start() - 3)
+                            end_idx = match.end() + 30
+                            context = words[start_idx:end_idx]
+
+                            # Save the extracted context
+                            context_text = ' '.join(context)
+                            extracted_text += f"Page {page_num + 1}, Image {img_index + 1}:\n{context_text}\n\n"
+
+        # Write results to output file
+        with open(output_file, 'w', encoding='utf-8') as file:
+            file.write(extracted_text)
+
+        # Mark completion and stop loading indicator
+        self.extracting = False
+        messagebox.showinfo("Job Finished", f"Extraction completed for {os.path.basename(pdf_path)}. Output saved to {output_file}.")
+
+# Run the Tkinter application
+root = tk.Tk()
+app = PDFImageTextExtractorApp(root)
+root.mainloop()
