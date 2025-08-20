@@ -1,1 +1,1 @@
-web: sh setup.sh && streamlit run webapp02.py
+web: sh setup.sh && streamlit run bot_completo_g9.py
