@@ -9,3 +9,5 @@ plotly.express
 ACTlib01
 wordcloud
 pdfquery 
+python-telegram-bot==20.0
+python-dotenv==0.21.0
